@@ -1,5 +1,4 @@
 const express = require("express");
-const axios = require("axios");
 const Alpaca = require("@alpacahq/alpaca-trade-api");
 const {
   getWeeklyRSI,
@@ -9,16 +8,16 @@ const {
   getLatestStockPrice,
   canBuyStock,
 } = require("./utils");
+const { sendEmail } = require("./email");
 const Twilio = require("twilio");
 const client = new Twilio(
   "ACc375e9f7821e39c0b856165a298b1fe8",
   "f1f775739885b5e7c7a75373586e7746"
 );
 require("dotenv").config();
-const cron = require("node-cron");
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 4000;
 
 const alpaca = new Alpaca({
   keyId: process.env.ALPACA_KEY_ID,
@@ -36,23 +35,20 @@ app.listen(port, () => {
 // Define an endpoint to fetch RSI data
 app.get("/doWork", async (req, res) => {
   try {
-    let response = {};
-    await getAccountInfo().then((accountInfo) => {
-      response.accountInfo = accountInfo;
-    });
-
-    await getPositionsInfo().then((positionInfo) => {
-      response.positionInfo = positionInfo;
-    });
-
-    await getOrdersInfo().then((orderInfo) => {
-      response.orderInfo = orderInfo;
-    });
+    let response = await getAllAccountInfo({});
 
     if (ableToBuy(response)) {
       response = await lookForAndMaybeBuyStock(response);
     } else if (ableToSell(response)) {
       response = await maybeSellStock(response);
+    }
+
+    if (response.soldStock) {
+      await sleep(5000);
+      response = await getAllAccountInfo(response);
+      if (ableToBuy(response)) {
+        response = await lookForAndMaybeBuyStock(response);
+      }
     }
 
     res.json(response);
@@ -67,49 +63,31 @@ app.get("/doWork", async (req, res) => {
   }
 });
 
-const task = cron.schedule("54 13 * * *", async () => {
-  // This function will be executed at 1:45 PM daily
-  // Place your code here to run the desired function
-  console.log("Running your function at 1:45 PM daily...");
-  try {
-    let response = {};
-    await getAccountInfo().then((accountInfo) => {
-      response.accountInfo = accountInfo;
-    });
+async function getAllAccountInfo(response) {
+  await getAccountInfo().then((accountInfo) => {
+    response.accountInfo = accountInfo;
+  });
 
-    await getPositionsInfo().then((positionInfo) => {
-      response.positionInfo = positionInfo;
-    });
+  await getPositionsInfo().then((positionInfo) => {
+    response.positionInfo = positionInfo;
+  });
 
-    await getOrdersInfo().then((orderInfo) => {
-      response.orderInfo = orderInfo;
-    });
-
-    if (ableToBuy(response)) {
-      response = await lookForAndMaybeBuyStock(response);
-    } else if (ableToSell(response)) {
-      response = await maybeSellStock(response);
-    }
-  } catch (error) {
-    client.messages.create({
-      from: "+18443298228",
-      body: `Something went wrong with the stock trading bot.`,
-      to: process.env.MY_NUMBER,
-    });
-    console.error("Error:", error);
-  }
-});
-
-task.start();
+  await getOrdersInfo().then((orderInfo) => {
+    response.orderInfo = orderInfo;
+  });
+  return response;
+}
 
 async function maybeSellStock(response) {
   const symbols = [response.positionInfo[0].symbol];
   let allStockData = await getStockInfo(symbols);
   response.stockToSellData = allStockData;
 
+  response.soldStock = false;
   if (shouldSellStock(response)) {
     // if (true) {
     response = await sellStock(response);
+    response.soldStock = true;
     await getOrdersInfo().then((orderInfo) => {
       response.orderInfo = orderInfo;
     });
@@ -130,6 +108,13 @@ async function sellStock(data) {
   });
   console.log(
     `Selling ${data.positionInfo[0].qty} shares of ${data.positionInfo[0].symbol}! Portfolio value: ${data.accountInfo.portfolio_value}`
+  );
+  const toEmail = process.env.TO_EMAIL || "default@gmail.com";
+  await sendEmail(
+    toEmail,
+    `Selling ${data.positionInfo[0].qty} shares of ${data.positionInfo[0].symbol}! Portfolio value: ${data.accountInfo.portfolio_value}`,
+    `Selling ${data.positionInfo[0].qty} shares of ${data.positionInfo[0].symbol}! Portfolio value: ${data.accountInfo.portfolio_value}`,
+    "<b>Hello world?</b>"
   );
   return data;
 }
@@ -197,6 +182,13 @@ async function lookForAndMaybeBuyStock(response) {
     });
     console.log(
       `Buying ${numSharesToBuy} shares of ${response.stockToBuy.symbol}! Portfolio value: ${response.accountInfo.portfolio_value}`
+    );
+    const toEmail = process.env.TO_EMAIL || "default@gmail.com";
+    await sendEmail(
+      toEmail,
+      `Buying ${numSharesToBuy} shares of ${response.stockToBuy.symbol}! Portfolio value: ${response.accountInfo.portfolio_value}`,
+      `Buying ${numSharesToBuy} shares of ${response.stockToBuy.symbol}! Portfolio value: ${response.accountInfo.portfolio_value}`,
+      "<b>Hello world?</b>"
     );
 
     await getOrdersInfo().then((orderInfo) => {
