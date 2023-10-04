@@ -1,7 +1,15 @@
 const axios = require("axios");
 require("dotenv").config();
+const Alpaca = require("@alpacahq/alpaca-trade-api");
 
 const apiKey = process.env.ALPHA_VANTAGE_API_KEY;
+
+const alpaca = new Alpaca({
+  keyId: process.env.ALPACA_KEY_ID,
+  secretKey: process.env.ALPACA_SECRET_KEY,
+  paper: true, // Set to 'false' for live trading
+  usePolygon: false, // Set to 'true' if you want to use Polygon.io data
+});
 
 function getWeeklyRSI(symbol) {
   return axios.get(
@@ -132,6 +140,51 @@ function getTodayDate() {
   return `${year}-${month}-${day}`;
 }
 
+async function getAllAccountInfo(response) {
+  await getAccountInfo().then((accountInfo) => {
+    response.accountInfo = accountInfo;
+  });
+
+  await getPositionsInfo().then((positionInfo) => {
+    response.positionInfo = positionInfo;
+  });
+
+  await getOrdersInfo().then((orderInfo) => {
+    response.orderInfo = orderInfo;
+  });
+  return response;
+}
+
+async function getAccountInfo() {
+  try {
+    let account = await alpaca.getAccount();
+    return account;
+  } catch (error) {
+    console.error("Error fetching account information:", error);
+    throw error; // You can choose to handle the error as needed
+  }
+}
+
+async function getPositionsInfo() {
+  try {
+    let positions = await alpaca.getPositions();
+    return positions;
+  } catch (error) {
+    console.error("Error fetching position information:", error);
+    throw error; // You can choose to handle the error as needed
+  }
+}
+
+async function getOrdersInfo() {
+  try {
+    let orders = await alpaca.getOrders();
+    return orders;
+  } catch (error) {
+    console.error("Error fetching position information:", error);
+    throw error; // You can choose to handle the error as needed
+  }
+}
+
 module.exports = {
   getWeeklyRSI,
   get50SMA,
@@ -139,4 +192,5 @@ module.exports = {
   compileStockData,
   getLatestStockPrice,
   canBuyStock,
+  getAllAccountInfo,
 };

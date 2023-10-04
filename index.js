@@ -7,6 +7,7 @@ const {
   compileStockData,
   getLatestStockPrice,
   canBuyStock,
+  getAllAccountInfo,
 } = require("./utils");
 const { sendEmail } = require("./email");
 const Twilio = require("twilio");
@@ -17,7 +18,7 @@ const client = new Twilio(
 require("dotenv").config();
 
 const app = express();
-const port = process.env.PORT || 4000;
+const port = process.env.PORT || 3040;
 
 const alpaca = new Alpaca({
   keyId: process.env.ALPACA_KEY_ID,
@@ -44,7 +45,7 @@ app.get("/doWork", async (req, res) => {
     }
 
     if (response.soldStock) {
-      await sleep(5000);
+      await sleep(10000);
       response = await getAllAccountInfo(response);
       if (ableToBuy(response)) {
         response = await lookForAndMaybeBuyStock(response);
@@ -62,21 +63,6 @@ app.get("/doWork", async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
-
-async function getAllAccountInfo(response) {
-  await getAccountInfo().then((accountInfo) => {
-    response.accountInfo = accountInfo;
-  });
-
-  await getPositionsInfo().then((positionInfo) => {
-    response.positionInfo = positionInfo;
-  });
-
-  await getOrdersInfo().then((orderInfo) => {
-    response.orderInfo = orderInfo;
-  });
-  return response;
-}
 
 async function maybeSellStock(response) {
   const symbols = [response.positionInfo[0].symbol];
@@ -160,6 +146,12 @@ async function lookForAndMaybeBuyStock(response) {
     "GOOG",
     "NFLX",
     "ORCL",
+    "ATI",
+    "WSC",
+    "ARCO",
+    "SAP",
+    "WFRD",
+    "MNST",
   ];
 
   let allStockData = await getStockInfo(symbols);
@@ -204,15 +196,10 @@ function sleep(ms) {
 
 async function getStockInfo(symbols) {
   let allStockData = [];
-  let counter = 0;
 
   for (let symbol of symbols) {
-    counter++;
-
-    if (counter > 3) {
-      counter = 0;
-      await sleep(61000);
-    }
+    // need to sleep for a minute between each stock once have free version of alpha vantage, get 5 api calls per minute and each of these calls the api 4 times.
+    await sleep(61000);
 
     const weeklyRSI = await getWeeklyRSI(symbol);
     const SMA50 = await get50SMA(symbol);
@@ -256,26 +243,6 @@ function ableToBuy(data) {
   return !data.positionInfo.length && !data.orderInfo.length;
 }
 
-async function getAccountInfo() {
-  try {
-    let account = await alpaca.getAccount();
-    return account;
-  } catch (error) {
-    console.error("Error fetching account information:", error);
-    throw error; // You can choose to handle the error as needed
-  }
-}
-
-async function getPositionsInfo() {
-  try {
-    let positions = await alpaca.getPositions();
-    return positions;
-  } catch (error) {
-    console.error("Error fetching position information:", error);
-    throw error; // You can choose to handle the error as needed
-  }
-}
-
 async function getOrdersInfo() {
   try {
     let orders = await alpaca.getOrders();
@@ -283,16 +250,6 @@ async function getOrdersInfo() {
   } catch (error) {
     console.error("Error fetching position information:", error);
     throw error; // You can choose to handle the error as needed
-  }
-}
-
-async function cancelOrder(orderId) {
-  try {
-    await alpaca.cancelOrder(orderId);
-    console.log(`Order with ID ${orderId} cancelled successfully.`);
-  } catch (error) {
-    console.error(`Error cancelling order with ID ${orderId}:`, error);
-    throw error;
   }
 }
 
