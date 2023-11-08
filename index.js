@@ -11,11 +11,11 @@ const {
 } = require("./utils");
 const { sendEmail } = require("./email");
 const Twilio = require("twilio");
+require("dotenv").config();
 const client = new Twilio(
   "ACc375e9f7821e39c0b856165a298b1fe8",
-  "f1f775739885b5e7c7a75373586e7746"
+  process.env.TWILIO_AUTH_TOKEN
 );
-require("dotenv").config();
 
 const app = express();
 const port = process.env.PORT || 3040;
@@ -55,7 +55,7 @@ app.get("/doWork", async (req, res) => {
     res.json(response);
   } catch (error) {
     client.messages.create({
-      from: "+18443298228",
+      from: "+18135925206",
       body: `Something went wrong with the stock trading bot.`,
       to: process.env.MY_NUMBER,
     });
